@@ -89,7 +89,7 @@
       localStorage.setItem('usuarios', JSON.stringify(usuarios));
       mostrarNotificacion(`✅ Usuario ${nuevo.nombre} registrado (ID ${nuevo.id})`);
       form.reset();
-      window.location.href = 'index.html';
+      window.location.href = 'login.html';
     });
   }
 
@@ -162,3 +162,4 @@
 
   if (tabla) mostrarUsuarios();
 })();
+
