@@ -13,25 +13,15 @@
   let usuarioRenovarID = null;
 
   /* =========================
-     UTILIDADES
+     UTILIDADES FECHA
   ========================= */
-
-  function generarID() {
-    const usuarios = JSON.parse(localStorage.getItem('usuarios')) || [];
-    let max = 0;
-    usuarios.forEach(u => {
-      const num = parseInt(u.id?.replace('CF', ''), 10);
-      if (!isNaN(num) && num > max) max = num;
-    });
-    return 'CF' + String(max + 1).padStart(3, '0');
-  }
 
   function hoy() {
     return new Date().toISOString().split('T')[0];
   }
 
-  function calcularFechaFin(fechaInicio, tipo) {
-    const fecha = new Date(fechaInicio);
+  function calcularFechaFin(inicio, tipo) {
+    const fecha = new Date(inicio);
     fecha.setDate(fecha.getDate() + (tipo === 'semana' ? 7 : 30));
     return fecha.toISOString().split('T')[0];
   }
@@ -44,22 +34,47 @@
   }
 
   /* =========================
-     🔧 CORRECCIÓN AUTOMÁTICA
-     PARA USUARIOS ANTIGUOS
+     ID AUTOINCREMENTAL
   ========================= */
 
-  function corregirFechasAntiguas() {
+  function generarID() {
+    const usuarios = JSON.parse(localStorage.getItem('usuarios')) || [];
+    let max = 0;
+    usuarios.forEach(u => {
+      const num = parseInt(u.id?.replace('CF', ''), 10);
+      if (!isNaN(num) && num > max) max = num;
+    });
+    return 'CF' + String(max + 1).padStart(3, '0');
+  }
+
+  /* =========================
+     CORRECCIÓN AUTOMÁTICA
+     (USUARIOS VIEJOS)
+  ========================= */
+
+  function corregirUsuariosAntiguos() {
     let usuarios = JSON.parse(localStorage.getItem('usuarios')) || [];
-    let actualizado = false;
+    let cambios = false;
 
     usuarios.forEach(u => {
-      if (!u.fechaFin && u.fechaInicio && u.suscripcion) {
+      if (!u.fechaInicio) {
+        u.fechaInicio = u.fechaRegistro || hoy();
+        cambios = true;
+      }
+
+      if (!u.fechaFin && u.suscripcion) {
         u.fechaFin = calcularFechaFin(u.fechaInicio, u.suscripcion);
-        actualizado = true;
+        cambios = true;
+      }
+
+      // Preparado para historial
+      if (!u.historial) {
+        u.historial = [];
+        cambios = true;
       }
     });
 
-    if (actualizado) {
+    if (cambios) {
       localStorage.setItem('usuarios', JSON.stringify(usuarios));
     }
   }
@@ -70,8 +85,9 @@
 
   function mostrarUsuarios(filtro = '') {
     if (!tabla) return;
+
     const usuarios = JSON.parse(localStorage.getItem('usuarios')) || [];
-    const texto = filtro.toLowerCase().trim();
+    const texto = filtro.toLowerCase();
     tabla.innerHTML = '';
 
     const filtrados = usuarios.filter(u =>
@@ -115,7 +131,7 @@
   }
 
   /* =========================
-     REGISTRO DE USUARIOS
+     REGISTRO
   ========================= */
 
   if (form) {
@@ -128,58 +144,28 @@
       const nuevo = {
         id: generarID(),
         nombre: $('nombre').value.trim(),
-        edad: $('edad').value.trim(),
+        edad: $('edad').value,
         sexo: $('sexo').value,
         telefono: $('telefono').value.trim(),
         correo: $('correo').value.trim(),
         suscripcion: tipo,
         fechaInicio: inicio,
-        fechaFin: calcularFechaFin(inicio, tipo)
+        fechaFin: calcularFechaFin(inicio, tipo),
+        historial: []
       };
 
       const usuarios = JSON.parse(localStorage.getItem('usuarios')) || [];
       usuarios.push(nuevo);
       localStorage.setItem('usuarios', JSON.stringify(usuarios));
 
-      mostrarNotificacion(`✅ Usuario ${nuevo.nombre} registrado`);
+      mostrarNotificacion('✅ Usuario registrado');
       form.reset();
       window.location.href = 'login.html';
     });
   }
 
   /* =========================
-     BUSCADOR
-  ========================= */
-
-  if (buscar) {
-    buscar.addEventListener('input', () => mostrarUsuarios(buscar.value));
-  }
-
-  window.mostrarUsuarios = mostrarUsuarios;
-
-  /* =========================
-     ELIMINAR
-  ========================= */
-
-  window.eliminarUsuario = function (id) {
-    if (confirm(`¿Eliminar usuario ${id}?`)) {
-      let usuarios = JSON.parse(localStorage.getItem('usuarios')) || [];
-      usuarios = usuarios.filter(u => u.id !== id);
-      localStorage.setItem('usuarios', JSON.stringify(usuarios));
-      mostrarUsuarios();
-      mostrarNotificacion('🗑️ Usuario eliminado');
-    }
-  };
-
-  window.borrarDatos = function () {
-    if (confirm('¿Borrar todos los usuarios?')) {
-      localStorage.removeItem('usuarios');
-      mostrarUsuarios();
-    }
-  };
-
-  /* =========================
-     MODAL RENOVAR
+     RENOVAR (BASE HISTORIAL)
   ========================= */
 
   window.abrirModalRenovar = function (id) {
@@ -188,19 +174,21 @@
     modal.style.display = 'flex';
   };
 
-  btnCancelar.addEventListener('click', () => {
-    modal.style.display = 'none';
-    usuarioRenovarID = null;
-  });
-
   function renovar(tipo) {
     let usuarios = JSON.parse(localStorage.getItem('usuarios')) || [];
-    const usuario = usuarios.find(u => u.id === usuarioRenovarID);
-    if (!usuario) return;
+    const u = usuarios.find(x => x.id === usuarioRenovarID);
+    if (!u) return;
 
-    usuario.suscripcion = tipo;
-    usuario.fechaInicio = hoy();
-    usuario.fechaFin = calcularFechaFin(usuario.fechaInicio, tipo);
+    // Guardar historial
+    u.historial.push({
+      inicio: u.fechaInicio,
+      fin: u.fechaFin,
+      tipo: u.suscripcion
+    });
+
+    u.suscripcion = tipo;
+    u.fechaInicio = hoy();
+    u.fechaFin = calcularFechaFin(u.fechaInicio, tipo);
 
     localStorage.setItem('usuarios', JSON.stringify(usuarios));
     modal.style.display = 'none';
@@ -208,8 +196,23 @@
     mostrarNotificacion('🔄 Membresía renovada');
   }
 
-  btnSemana.addEventListener('click', () => renovar('semana'));
-  btnMes.addEventListener('click', () => renovar('mes'));
+  btnSemana.onclick = () => renovar('semana');
+  btnMes.onclick = () => renovar('mes');
+  btnCancelar.onclick = () => modal.style.display = 'none';
+
+  /* =========================
+     ELIMINAR / BUSCAR
+  ========================= */
+
+  window.eliminarUsuario = function (id) {
+    if (!confirm('¿Eliminar usuario?')) return;
+    let usuarios = JSON.parse(localStorage.getItem('usuarios')) || [];
+    usuarios = usuarios.filter(u => u.id !== id);
+    localStorage.setItem('usuarios', JSON.stringify(usuarios));
+    mostrarUsuarios();
+  };
+
+  if (buscar) buscar.addEventListener('input', () => mostrarUsuarios(buscar.value));
 
   /* =========================
      NOTIFICACIÓN
@@ -226,12 +229,7 @@
      INICIO
   ========================= */
 
-  corregirFechasAntiguas();
+  corregirUsuariosAntiguos();
   if (tabla) mostrarUsuarios();
 
 })();
-
-
-
-
-
