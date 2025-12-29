@@ -12,6 +12,10 @@
 
   let usuarioRenovarID = null;
 
+  /* =========================
+     UTILIDADES
+  ========================= */
+
   function generarID() {
     const usuarios = JSON.parse(localStorage.getItem('usuarios')) || [];
     let max = 0;
@@ -39,6 +43,31 @@
     return Math.max(diff, 0);
   }
 
+  /* =========================
+     🔧 CORRECCIÓN AUTOMÁTICA
+     PARA USUARIOS ANTIGUOS
+  ========================= */
+
+  function corregirFechasAntiguas() {
+    let usuarios = JSON.parse(localStorage.getItem('usuarios')) || [];
+    let actualizado = false;
+
+    usuarios.forEach(u => {
+      if (!u.fechaFin && u.fechaInicio && u.suscripcion) {
+        u.fechaFin = calcularFechaFin(u.fechaInicio, u.suscripcion);
+        actualizado = true;
+      }
+    });
+
+    if (actualizado) {
+      localStorage.setItem('usuarios', JSON.stringify(usuarios));
+    }
+  }
+
+  /* =========================
+     MOSTRAR USUARIOS
+  ========================= */
+
   function mostrarUsuarios(filtro = '') {
     if (!tabla) return;
     const usuarios = JSON.parse(localStorage.getItem('usuarios')) || [];
@@ -51,7 +80,12 @@
     );
 
     if (filtrados.length === 0) {
-      tabla.innerHTML = `<tr><td colspan="11" style="text-align:center;color:gray;">No hay resultados</td></tr>`;
+      tabla.innerHTML = `
+        <tr>
+          <td colspan="11" style="text-align:center;color:gray;">
+            No hay resultados
+          </td>
+        </tr>`;
       return;
     }
 
@@ -80,10 +114,14 @@
     });
   }
 
-  // REGISTRO
+  /* =========================
+     REGISTRO DE USUARIOS
+  ========================= */
+
   if (form) {
     form.addEventListener('submit', e => {
       e.preventDefault();
+
       const tipo = $('suscripcion').value;
       const inicio = hoy();
 
@@ -109,9 +147,19 @@
     });
   }
 
-  if (buscar) buscar.addEventListener('input', () => mostrarUsuarios(buscar.value));
+  /* =========================
+     BUSCADOR
+  ========================= */
+
+  if (buscar) {
+    buscar.addEventListener('input', () => mostrarUsuarios(buscar.value));
+  }
 
   window.mostrarUsuarios = mostrarUsuarios;
+
+  /* =========================
+     ELIMINAR
+  ========================= */
 
   window.eliminarUsuario = function (id) {
     if (confirm(`¿Eliminar usuario ${id}?`)) {
@@ -119,36 +167,9 @@
       usuarios = usuarios.filter(u => u.id !== id);
       localStorage.setItem('usuarios', JSON.stringify(usuarios));
       mostrarUsuarios();
-      mostrarNotificacion(`🗑️ Usuario eliminado`);
+      mostrarNotificacion('🗑️ Usuario eliminado');
     }
   };
-
-  // MODAL RENOVAR
-  window.abrirModalRenovar = function (id) {
-    usuarioRenovarID = id;
-    modalNombre.textContent = `Renovar membresía (${id})`;
-    modal.style.display = 'flex';
-  };
-
-  btnCancelar.addEventListener('click', () => modal.style.display = 'none');
-
-  function renovar(tipo) {
-    let usuarios = JSON.parse(localStorage.getItem('usuarios')) || [];
-    const u = usuarios.find(x => x.id === usuarioRenovarID);
-    if (!u) return;
-
-    u.suscripcion = tipo;
-    u.fechaInicio = hoy();
-    u.fechaFin = calcularFechaFin(u.fechaInicio, tipo);
-
-    localStorage.setItem('usuarios', JSON.stringify(usuarios));
-    modal.style.display = 'none';
-    mostrarUsuarios();
-    mostrarNotificacion(`🔄 Membresía renovada`);
-  }
-
-  btnSemana.addEventListener('click', () => renovar('semana'));
-  btnMes.addEventListener('click', () => renovar('mes'));
 
   window.borrarDatos = function () {
     if (confirm('¿Borrar todos los usuarios?')) {
@@ -157,6 +178,43 @@
     }
   };
 
+  /* =========================
+     MODAL RENOVAR
+  ========================= */
+
+  window.abrirModalRenovar = function (id) {
+    usuarioRenovarID = id;
+    modalNombre.textContent = `Renovar membresía (${id})`;
+    modal.style.display = 'flex';
+  };
+
+  btnCancelar.addEventListener('click', () => {
+    modal.style.display = 'none';
+    usuarioRenovarID = null;
+  });
+
+  function renovar(tipo) {
+    let usuarios = JSON.parse(localStorage.getItem('usuarios')) || [];
+    const usuario = usuarios.find(u => u.id === usuarioRenovarID);
+    if (!usuario) return;
+
+    usuario.suscripcion = tipo;
+    usuario.fechaInicio = hoy();
+    usuario.fechaFin = calcularFechaFin(usuario.fechaInicio, tipo);
+
+    localStorage.setItem('usuarios', JSON.stringify(usuarios));
+    modal.style.display = 'none';
+    mostrarUsuarios();
+    mostrarNotificacion('🔄 Membresía renovada');
+  }
+
+  btnSemana.addEventListener('click', () => renovar('semana'));
+  btnMes.addEventListener('click', () => renovar('mes'));
+
+  /* =========================
+     NOTIFICACIÓN
+  ========================= */
+
   function mostrarNotificacion(msg) {
     if (!notificacion) return;
     notificacion.textContent = msg;
@@ -164,8 +222,15 @@
     setTimeout(() => notificacion.classList.remove('visible'), 2000);
   }
 
+  /* =========================
+     INICIO
+  ========================= */
+
+  corregirFechasAntiguas();
   if (tabla) mostrarUsuarios();
+
 })();
+
 
 
 
