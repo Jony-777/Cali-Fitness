@@ -22,12 +22,21 @@
     return 'CF' + String(max + 1).padStart(3, '0');
   }
 
-  function calcularDiasRestantes(fecha, tipo) {
-    const hoy = new Date();
-    const inicio = new Date(fecha);
-    const total = tipo === 'semana' ? 7 : 30;
-    const diff = Math.floor((hoy - inicio) / (1000 * 60 * 60 * 24));
-    return Math.max(total - diff, 0);
+  function hoy() {
+    return new Date().toISOString().split('T')[0];
+  }
+
+  function calcularFechaFin(fechaInicio, tipo) {
+    const fecha = new Date(fechaInicio);
+    fecha.setDate(fecha.getDate() + (tipo === 'semana' ? 7 : 30));
+    return fecha.toISOString().split('T')[0];
+  }
+
+  function calcularDiasRestantes(fechaFin) {
+    const hoyFecha = new Date();
+    const fin = new Date(fechaFin);
+    const diff = Math.ceil((fin - hoyFecha) / (1000 * 60 * 60 * 24));
+    return Math.max(diff, 0);
   }
 
   function mostrarUsuarios(filtro = '') {
@@ -42,12 +51,12 @@
     );
 
     if (filtrados.length === 0) {
-      tabla.innerHTML = `<tr><td colspan="10" style="text-align:center;color:gray;">No hay resultados</td></tr>`;
+      tabla.innerHTML = `<tr><td colspan="11" style="text-align:center;color:gray;">No hay resultados</td></tr>`;
       return;
     }
 
     filtrados.forEach(u => {
-      const dias = calcularDiasRestantes(u.fechaRegistro, u.suscripcion);
+      const dias = calcularDiasRestantes(u.fechaFin);
       const tr = document.createElement('tr');
       if (dias === 0) tr.classList.add('vencido');
 
@@ -56,24 +65,28 @@
         <td>${u.nombre}</td>
         <td>${u.edad}</td>
         <td>${u.sexo}</td>
-        <td>${u.telefono}</td>
-        <td>${u.correo}</td>
+        <td>${u.telefono || '-'}</td>
+        <td>${u.correo || '-'}</td>
         <td>${u.suscripcion}</td>
-        <td>${u.fechaRegistro}</td>
+        <td>${u.fechaInicio}</td>
+        <td>${u.fechaFin}</td>
         <td>${dias === 0 ? "<span class='tag-vencido'>Vencido</span>" : dias + " días"}</td>
         <td>
-          <button class="btn-renovar" onclick="abrirModalRenovar('${u.id}')">🔄</button>
-          <button class="btn-danger btn-delete" onclick="eliminarUsuario('${u.id}')">🗑️</button>
+          <button class="btn-primary" onclick="abrirModalRenovar('${u.id}')">🔄</button>
+          <button class="btn-danger" onclick="eliminarUsuario('${u.id}')">🗑️</button>
         </td>
       `;
       tabla.appendChild(tr);
     });
   }
 
-  // Registrar usuario
+  // REGISTRO
   if (form) {
     form.addEventListener('submit', e => {
       e.preventDefault();
+      const tipo = $('suscripcion').value;
+      const inicio = hoy();
+
       const nuevo = {
         id: generarID(),
         nombre: $('nombre').value.trim(),
@@ -81,13 +94,16 @@
         sexo: $('sexo').value,
         telefono: $('telefono').value.trim(),
         correo: $('correo').value.trim(),
-        suscripcion: $('suscripcion').value,
-        fechaRegistro: new Date().toISOString().split('T')[0]
+        suscripcion: tipo,
+        fechaInicio: inicio,
+        fechaFin: calcularFechaFin(inicio, tipo)
       };
+
       const usuarios = JSON.parse(localStorage.getItem('usuarios')) || [];
       usuarios.push(nuevo);
       localStorage.setItem('usuarios', JSON.stringify(usuarios));
-      mostrarNotificacion(`✅ Usuario ${nuevo.nombre} registrado (ID ${nuevo.id})`);
+
+      mostrarNotificacion(`✅ Usuario ${nuevo.nombre} registrado`);
       form.reset();
       window.location.href = 'login.html';
     });
@@ -98,68 +114,57 @@
   window.mostrarUsuarios = mostrarUsuarios;
 
   window.eliminarUsuario = function (id) {
-    if (confirm(`¿Deseas eliminar al usuario ${id}?`)) {
+    if (confirm(`¿Eliminar usuario ${id}?`)) {
       let usuarios = JSON.parse(localStorage.getItem('usuarios')) || [];
       usuarios = usuarios.filter(u => u.id !== id);
       localStorage.setItem('usuarios', JSON.stringify(usuarios));
-      mostrarUsuarios(buscar ? buscar.value : '');
-      mostrarNotificacion(`🗑️ Usuario ${id} eliminado`);
+      mostrarUsuarios();
+      mostrarNotificacion(`🗑️ Usuario eliminado`);
     }
   };
 
-  // ✅ Abrir modal de renovación
+  // MODAL RENOVAR
   window.abrirModalRenovar = function (id) {
-    const usuarios = JSON.parse(localStorage.getItem('usuarios')) || [];
-    const usuario = usuarios.find(u => u.id === id);
-    if (!usuario) return;
-
     usuarioRenovarID = id;
-    modalNombre.textContent = `Renovar a: ${usuario.nombre} (${usuario.id})`;
+    modalNombre.textContent = `Renovar membresía (${id})`;
     modal.style.display = 'flex';
   };
 
-  // ✅ Cerrar modal
-  function cerrarModal() {
-    modal.style.display = 'none';
-    usuarioRenovarID = null;
-  }
+  btnCancelar.addEventListener('click', () => modal.style.display = 'none');
 
-  btnCancelar.addEventListener('click', cerrarModal);
-
-  // ✅ Renovar suscripción (Semana o Mes)
-  function renovarSuscripcion(tipo) {
-    if (!usuarioRenovarID) return;
+  function renovar(tipo) {
     let usuarios = JSON.parse(localStorage.getItem('usuarios')) || [];
-    const index = usuarios.findIndex(u => u.id === usuarioRenovarID);
-    if (index === -1) return;
+    const u = usuarios.find(x => x.id === usuarioRenovarID);
+    if (!u) return;
 
-    usuarios[index].suscripcion = tipo;
-    usuarios[index].fechaRegistro = new Date().toISOString().split('T')[0];
+    u.suscripcion = tipo;
+    u.fechaInicio = hoy();
+    u.fechaFin = calcularFechaFin(u.fechaInicio, tipo);
 
     localStorage.setItem('usuarios', JSON.stringify(usuarios));
-    mostrarUsuarios(buscar ? buscar.value : '');
-    mostrarNotificacion(`🔄 ${usuarios[index].nombre} renovado con plan ${tipo}`);
-    cerrarModal();
+    modal.style.display = 'none';
+    mostrarUsuarios();
+    mostrarNotificacion(`🔄 Membresía renovada`);
   }
 
-  btnSemana.addEventListener('click', () => renovarSuscripcion('semana'));
-  btnMes.addEventListener('click', () => renovarSuscripcion('mes'));
+  btnSemana.addEventListener('click', () => renovar('semana'));
+  btnMes.addEventListener('click', () => renovar('mes'));
 
   window.borrarDatos = function () {
-    if (confirm('¿Seguro que deseas borrar TODOS los usuarios registrados?')) {
+    if (confirm('¿Borrar todos los usuarios?')) {
       localStorage.removeItem('usuarios');
       mostrarUsuarios();
-      mostrarNotificacion('🗑️ Todos los usuarios fueron eliminados');
     }
   };
 
-  function mostrarNotificacion(mensaje) {
+  function mostrarNotificacion(msg) {
     if (!notificacion) return;
-    notificacion.textContent = mensaje;
+    notificacion.textContent = msg;
     notificacion.classList.add('visible');
     setTimeout(() => notificacion.classList.remove('visible'), 2000);
   }
 
   if (tabla) mostrarUsuarios();
 })();
+
 
